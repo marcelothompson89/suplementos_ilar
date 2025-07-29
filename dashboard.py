@@ -89,7 +89,7 @@ st.markdown("""
 
 # Datos regulatorios estructurados basados en el PDF
 CATEGORIAS_REGULATORIAS = {
-    "Marco Legal": {
+    "Definición e Instrumento Legal": {
         "Instrumento legal de referencia": "instrumento_legal",
         "Definición legal": "definicion_legal"
     },
@@ -97,7 +97,7 @@ CATEGORIAS_REGULATORIAS = {
         "Categoría": "categoria_regulatoria",
         "Proceso de autorización": "proceso_autorizacion"
     },
-    "Proceso de Registro": {
+    "Proceso de Autorización": {
         "Proceso de registro/notificación": "proceso_registro",
         "Proceso y autoridades responsables": "autoridades_responsables",
         "Documentación": "documentacion",
@@ -114,10 +114,10 @@ CATEGORIAS_REGULATORIAS = {
         "Declaración de propiedades de salud": "propiedades_salud",
         "Declaración de propiedades nutricionales": "propiedades_nutricionales"
     },
-    "Manufactura": {
+    "Requisitos de Manufactura Para Establecimientos": {
         "Buenas Prácticas de Manufactura": "bpm"
     },
-    "Ingredientes": {
+    "Uso de ingredientes": {
         "Ingredientes permitidos": "ingredientes_permitidos",
         "Proceso para nuevos ingredientes": "nuevos_ingredientes"
     }
