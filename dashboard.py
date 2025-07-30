@@ -4,6 +4,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import numpy as np
+import re
 
 # Configuración de la página
 st.set_page_config(
@@ -471,6 +472,15 @@ def mostrar_comparacion_regulatoria():
     st.header("🏛️ Comparación de Marco Regulatorio")
     st.markdown("### Compara las regulaciones de suplementos entre países de América Latina")
     
+    # Filtros específicos en sidebar
+    st.sidebar.markdown("---")
+    st.sidebar.header("🌎 Filtros - Comparación Regulatoria")
+    
+    # Mostrar información en sidebar
+    st.sidebar.markdown("### 📊 Información")
+    st.sidebar.metric("Países disponibles", len(PAISES_DISPONIBLES))
+    st.sidebar.metric("Categorías regulatorias", len(CATEGORIAS_REGULATORIAS))
+    
     # Controles de selección
     col1, col2 = st.columns([1, 1])
     
@@ -479,8 +489,8 @@ def mostrar_comparacion_regulatoria():
             "🌎 Seleccionar países a comparar:",
             PAISES_DISPONIBLES,
             default=["Argentina", "Brasil"],
-            max_selections=4,  # Limitar para mejor visualización
-            key="paises_comparacion"
+            key="paises_comparacion",
+            help="Selecciona los países que deseas comparar"
         )
     
     with col2:
@@ -531,7 +541,7 @@ def mostrar_comparacion_regulatoria():
         
         st.markdown("---")
     
-    # Botón de exportación
+    # Botón de exportación - CORREGIDO
     if st.button("📥 Exportar Comparación", key="export_comparacion"):
         # Crear DataFrame para exportar
         export_data = []
@@ -539,19 +549,39 @@ def mostrar_comparacion_regulatoria():
             row = {"Aspecto": subcategoria_nombre}
             for pais in paises_seleccionados:
                 if pais in datos_regulatorios and subcategoria_key in datos_regulatorios[pais]:
-                    row[pais] = datos_regulatorios[pais][subcategoria_key]
+                    # Limpiar HTML/markdown de los datos para CSV
+                    import re
+                    texto_limpio = datos_regulatorios[pais][subcategoria_key]
+                    # Remover tags HTML básicos
+                    texto_limpio = re.sub(r'<[^>]+>', '', texto_limpio)
+                    # Remover caracteres de markdown
+                    texto_limpio = re.sub(r'\*\*([^*]+)\*\*', r'\1', texto_limpio)  # **texto** -> texto
+                    texto_limpio = re.sub(r'\*([^*]+)\*', r'\1', texto_limpio)      # *texto* -> texto
+                    texto_limpio = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', texto_limpio)  # [texto](url) -> texto
+                    row[pais] = texto_limpio
                 else:
                     row[pais] = "No disponible"
             export_data.append(row)
         
         df_export = pd.DataFrame(export_data)
-        csv = df_export.to_csv(index=False)
+        
+        # Convertir a CSV con codificación UTF-8
+        csv = df_export.to_csv(index=False, encoding='utf-8-sig')
+        
+        # Crear descarga funcional
         st.download_button(
             label="📄 Descargar CSV",
-            data=csv,
+            data=csv.encode('utf-8-sig'),
             file_name=f"comparacion_regulatoria_{categoria_seleccionada.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
+            mime="text/csv",
+            use_container_width=True
         )
+        
+        st.success("✅ Archivo CSV generado exitosamente. Haz clic en 'Descargar CSV' para obtenerlo.")
+        
+        # Mostrar preview de los datos a exportar
+        with st.expander("👀 Vista previa de datos a exportar"):
+            st.dataframe(df_export, use_container_width=True)
 
 def mostrar_analisis_ingrediente(df, df_referencias, ingrediente):
     """Muestra análisis detallado de un ingrediente específico"""
@@ -611,10 +641,10 @@ def mostrar_analisis_ingrediente(df, df_referencias, ingrediente):
     # Opciones de visualización
     col_ref1, col_ref2 = st.columns(2)
     with col_ref1:
-        mostrar_refs_detalle = st.checkbox("📖 Mostrar descripciones de referencias", value=True, key="refs_ingrediente")
+        mostrar_refs_detalle = st.checkbox("📖 Mostrar descripciones de referencias", value=True, key=f"refs_{ingrediente.replace(' ', '_')}")
     
     with col_ref2:
-        mostrar_valor_original = st.checkbox("📄 Mostrar valor original", value=False, key="valor_original_ingrediente")
+        mostrar_valor_original = st.checkbox("📄 Mostrar valor original", value=False, key=f"valor_original_{ingrediente.replace(' ', '_')}")
     
     # Preparar columnas a mostrar
     columnas_base = ['pais', 'minimo', 'maximo', 'establecido', 'categoria_regulacion', 'referencias']
@@ -677,74 +707,149 @@ def mostrar_analisis_ingrediente(df, df_referencias, ingrediente):
                         # Debug info
                         st.caption(f"Buscando: ref='{ref}', tipo='{tipo_ingrediente}'")
 
+
+def mostrar_analisis_ingredientes():
+    """Muestra la página de análisis por ingrediente"""
+    st.markdown("### Análisis por Ingrediente")
+    st.markdown("---")
+    
+    # Cargar datos
+    df, df_referencias = cargar_datos()
+    
+    # Sidebar para filtros
+    st.sidebar.markdown("---")
+    st.sidebar.header("🔍 Filtros - Análisis Ingredientes")
+    
+    # Filtros adicionales
+    st.sidebar.markdown("### 🎯 Filtros Adicionales")
+    
+    tipos_disponibles = sorted(df['tipo'].unique())
+    
+    # Filtro de tipos (sin botón "Todos")
+    tipos_seleccionados = st.sidebar.multiselect(
+        "Filtrar por Tipo:",
+        tipos_disponibles,
+        default=tipos_disponibles,
+        key="tipos_ingredientes",
+        help="Por defecto se muestran todos los tipos"
+    )
+    
+    # Aplicar filtro de tipo
+    if tipos_seleccionados:
+        df_filtrado = df[df['tipo'].isin(tipos_seleccionados)]
+    else:
+        df_filtrado = df
+    
+    # Filtro por países
+    paises_disponibles_filtro = sorted(df_filtrado['pais'].unique())
+
+    # Agregar opción "Seleccionar Todos" para países
+    opciones_paises = ["🎯 Seleccionar Todos"] + paises_disponibles_filtro
+    paises_raw = st.sidebar.multiselect(
+        "Filtrar por Países:",
+        opciones_paises,
+        default=["🎯 Seleccionar Todos"],
+        key="paises_ingredientes"
+    )
+
+    # Procesar selección de países
+    if "🎯 Seleccionar Todos" in paises_raw:
+        paises_seleccionados_filtro = paises_disponibles_filtro
+        st.sidebar.info(f"✅ Todos los países ({len(paises_disponibles_filtro)})")
+    else:
+        paises_seleccionados_filtro = paises_raw
+
+    # Aplicar filtro de países
+    if paises_seleccionados_filtro:
+        df_filtrado = df_filtrado[df_filtrado['pais'].isin(paises_seleccionados_filtro)]
+    else:
+        st.sidebar.warning("⚠️ Selecciona al menos un país")
+        
+    # Mostrar métricas después de aplicar todos los filtros
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📊 Resumen General")
+    st.sidebar.metric("Total Países", df['pais'].nunique(), delta=f"Filtrados: {df_filtrado['pais'].nunique()}")
+    st.sidebar.metric("Total Ingredientes", df['ingrediente'].nunique(), delta=f"Filtrados: {df_filtrado['ingrediente'].nunique()}")
+
+    # Selector múltiple de ingredientes
+    ingredientes_disponibles = sorted(df_filtrado['ingrediente'].unique())
+
+    if not ingredientes_disponibles:
+        st.error("No hay ingredientes disponibles con los filtros seleccionados")
+        return
+
+    # Selector múltiple de ingredientes con opción "Todos"
+    opciones_ingredientes = ["🎯 Seleccionar Todos"] + ingredientes_disponibles
+    ingredientes_raw = st.multiselect(
+        "🔬 Seleccionar ingrediente(s) para análisis:",
+        opciones_ingredientes,
+        default=[],
+        key="ingredientes_analisis"
+    )
+
+    # Procesar selección de ingredientes
+    if "🎯 Seleccionar Todos" in ingredientes_raw:
+        ingredientes_seleccionados = ingredientes_disponibles
+        st.info(f"✅ Seleccionados todos los ingredientes ({len(ingredientes_disponibles)} total)")
+    else:
+        ingredientes_seleccionados = ingredientes_raw
+
+    # Mostrar análisis de los ingredientes seleccionados
+    if ingredientes_seleccionados:
+        if len(ingredientes_seleccionados) == 1:
+            # Un solo ingrediente - vista completa
+            ingrediente = ingredientes_seleccionados[0]
+            mostrar_analisis_ingrediente(df_filtrado, df_referencias, ingrediente)
+        
+            # Botón de descarga específico para el ingrediente
+            df_ingrediente_export = df_filtrado[df_filtrado['ingrediente'] == ingrediente]
+            csv = df_ingrediente_export.to_csv(index=False)
+            st.download_button(
+                label=f"📥 Descargar datos de {ingrediente} (CSV)",
+                data=csv,
+                file_name=f"suplemento_{ingrediente.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+        else:
+            # Múltiples ingredientes - vista en expandibles
+            st.markdown(f"### 📊 Análisis de {len(ingredientes_seleccionados)} Ingredientes Seleccionados")
+        
+            for ingrediente in ingredientes_seleccionados:
+                with st.expander(f"📋 {ingrediente}", expanded=False):
+                    mostrar_analisis_ingrediente(df_filtrado, df_referencias, ingrediente)
+        
+            # Botón de descarga para todos los ingredientes seleccionados
+            df_ingredientes_export = df_filtrado[df_filtrado['ingrediente'].isin(ingredientes_seleccionados)]
+            csv = df_ingredientes_export.to_csv(index=False)
+            st.download_button(
+                label=f"📥 Descargar datos de {len(ingredientes_seleccionados)} ingredientes (CSV)",
+                data=csv,
+                file_name=f"suplementos_seleccionados_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv"
+            )
+    else:
+        st.info("👆 Selecciona uno o más ingredientes para ver el análisis")
+
 def main():
     # Título principal
     st.title("Dashboard Regulaciones de Suplementos en América Latina")
     
-    # Crear pestañas
-    tab1, tab2 = st.tabs(["🧪 Análisis por Ingrediente", "🏛️ Comparación Regulatoria"])
+    # Navegación en sidebar
+    st.sidebar.markdown("""
+    <div class="sidebar-nav">
+        <h3>🧭 Navegación</h3>
+    </div>
+    """, unsafe_allow_html=True)
     
-    with tab1:
-        st.markdown("### Análisis por Ingrediente")
-        st.markdown("---")
-        
-        # Cargar datos
-        df, df_referencias = cargar_datos()
-        
-        # Sidebar para filtros (simplificado)
-        st.sidebar.header("🔍 Filtros - Análisis Ingredientes")
-        
-        # Mostrar métricas básicas en sidebar
-        st.sidebar.markdown("### 📊 Resumen General")
-        st.sidebar.metric("Total Países", df['pais'].nunique())
-        st.sidebar.metric("Total Ingredientes", df['ingrediente'].nunique())
-        
-        # Filtros adicionales opcionales
-        st.sidebar.markdown("---")
-        st.sidebar.markdown("### 🎯 Filtros Adicionales (Opcional)")
-        
-        tipos_disponibles = sorted(df['tipo'].unique())
-        tipos_seleccionados = st.sidebar.multiselect(
-            "Filtrar por Tipo:",
-            tipos_disponibles,
-            default=tipos_disponibles,
-            key="tipos_ingredientes"
-        )
-        
-        # Aplicar filtro de tipo si se selecciona
-        if tipos_seleccionados:
-            df_filtrado = df[df['tipo'].isin(tipos_seleccionados)]
-        else:
-            df_filtrado = df
-        
-        # Selector principal de ingrediente
-        ingredientes_disponibles = sorted(df_filtrado['ingrediente'].unique())
-        
-        if not ingredientes_disponibles:
-            st.error("No hay ingredientes disponibles con los filtros seleccionados")
-            return
-        
-        ingrediente_analisis = st.selectbox(
-            "🔬 Seleccionar ingrediente para análisis:",
-            ingredientes_disponibles,
-            key="ingrediente_analisis"
-        )
-        
-        # Mostrar análisis del ingrediente seleccionado
-        if ingrediente_analisis:
-            mostrar_analisis_ingrediente(df, df_referencias, ingrediente_analisis)
-            
-            # Botón de descarga específico para el ingrediente
-            df_ingrediente_export = df[df['ingrediente'] == ingrediente_analisis]
-            csv = df_ingrediente_export.to_csv(index=False)
-            st.download_button(
-                label=f"📥 Descargar datos de {ingrediente_analisis} (CSV)",
-                data=csv,
-                file_name=f"suplemento_{ingrediente_analisis.replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-                mime="text/csv"
-            )
+    pagina_seleccionada = st.sidebar.radio(
+        "Seleccionar sección:",
+        ["🧪 Análisis por Ingrediente", "🏛️ Comparación Regulatoria"],
+        key="navegacion_principal"
+    )
     
-    with tab2:
+    if pagina_seleccionada == "🧪 Análisis por Ingrediente":
+        mostrar_analisis_ingredientes()
+    else:
         mostrar_comparacion_regulatoria()
 
 if __name__ == "__main__":
